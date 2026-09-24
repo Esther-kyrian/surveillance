@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Écran PC • Récepteur caméra</title>
+  <!-- Bootstrap 5 + icônes -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <!-- PeerJS -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <style>
+    body {
+      background: radial-gradient(circle at 20% 10%, #141a2b 0%, #080b12 90%);
+      min-height: 100vh;
+      color: #e0e9f5;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      padding: 20px;
+      margin: 0;
+    }
+    .main-container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .card-glass {
+      background: rgba(20, 25, 40, 0.7);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 28px;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      padding: 22px 24px;
+    }
+    .video-container {
+      position: relative;
+      border-radius: 22px;
+      overflow: hidden;
+      background: #05070b;
+      box-shadow: 0 25px 45px -12px black, inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      aspect-ratio: 16 / 9;
+      width: 100%;
+    }
+    #remoteVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #05070b;
+      display: block;
+    }
+    .video-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #4a5a72;
+      text-align: center;
+      gap: 12px;
+      pointer-events: none;
+      transition: opacity 0.4s;
+    }
+    .video-placeholder.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .video-placeholder i {
+      font-size: 4rem;
+      opacity: 0.35;
+    }
+    .live-badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(220, 38, 38, 0.9);
+      color: white;
+      padding: 6px 14px;
+      border-radius: 50px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .live-badge.visible {
+      opacity: 1;
+    }
+    .live-badge .rec-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: white;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
+    .stats-overlay {
+      position: absolute;
+      bottom: 14px;
+      right: 14px;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(6px);
+      border-radius: 50px;
+      padding: 6px 14px;
+      font-size: 0.7rem;
+      font-family: 'SF Mono', monospace;
+      color: #9ab3d1;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-connect {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      border: none;
+      border-radius: 60px;
+      padding: 13px 26px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      transition: all 0.2s ease;
+      box-shadow: 0 8px 18px -6px #2563ebcc;
+      color: white;
+    }
+    .btn-connect:hover {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 22px -8px #2563ebee;
+      color: white;
+    }
+    .btn-connect:disabled {
+      background: #2a3142;
+      box-shadow: none;
+      transform: none;
+      opacity: 0.55;
+    }
+    .btn-disconnect {
+      background: rgba(220, 38, 38, 0.15);
+      border: 1px solid rgba(220, 38, 38, 0.5);
+      color: #ff8a8a;
+      border-radius: 60px;
+      padding: 13px 22px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn-disconnect:hover {
+      background: rgba(220, 38, 38, 0.3);
+      border-color: #ff4d4d;
+      color: white;
+    }
+    .btn-disconnect:disabled {
+      opacity: 0.35;
+    }
+    .btn-icon {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #b8c7e0;
+      border-radius: 50px;
+      width: 44px;
+      height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .btn-icon:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.3);
+      color: white;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 16px;
+      border-radius: 50px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #8fa3bf;
+    }
+    .status-pill .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #6c757d;
+    }
+    .status-pill.connected .dot {
+      background: #00e676;
+      box-shadow: 0 0 12px #00e676aa;
+      animation: pulse 1.8s infinite;
+    }
+    .status-pill.connecting .dot {
+      background: #ffb800;
+      box-shadow: 0 0 12px #ffb800aa;
+      animation: pulse 1s infinite;
+    }
+    .status-pill.error .dot {
+      background: #ff4d4d;
+      box-shadow: 0 0 12px #ff4d4daa;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    .peer-input {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 60px;
+      color: #e0e9f5;
+      padding: 12px 18px;
+      font-family: 'SF Mono', monospace;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+    .peer-input:focus {
+      background: rgba(0, 0, 0, 0.55);
+      border-color: #3b82f6;
+      color: white;
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+      outline: none;
+    }
+    .peer-input::placeholder {
+      color: #5b6d87;
+    }
+    .info-toast {
+      background: rgba(10, 15, 25, 0.92);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #e0e9f5;
+      padding: 12px 18px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .key-hint {
+      font-size: 0.7rem;
+      color: #5b6d87;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 3px 10px;
+      border-radius: 30px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+  </style>
+</head>
+<body>
+  <div class="main-container">
+    <!-- En-tête -->
+    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+      <div class="d-flex align-items-center gap-3">
+        <i class="bi bi-display fs-2" style="color: #3b82f6;"></i>
+        <div>
+          <h3 class="mb-0 fw-semibold" style="letter-spacing: -0.3px;">Écran PC</h3>
+          <small class="text-secondary">Récepteur de flux caméra</small>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="status-pill" id="statusPill">
+          <span class="dot"></span> <span id="statusText">Déconnecté</span>
+        </span>
+        <button class="btn-icon" id="fullscreenBtn" title="Plein écran">
+          <i class="bi bi-arrows-fullscreen"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Carte vidéo principale -->
+    <div class="card-glass">
+      <!-- Barre de connexion -->
+      <div class="row g-2 align-items-center mb-3">
+        <div class="col-12 col-md-5">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-broadcast text-secondary"></i>
+            <input type="text" class="form-control peer-input" id="peerIdInput" 
+                   value="my-phone-cam-12345" placeholder="ID du téléphone">
+          </div>
+        </div>
+        <div class="col-7 col-md-4">
+          <button id="connectBtn" class="btn btn-connect w-100 d-flex align-items-center justify-content-center gap-2">
+            <i class="bi bi-link-45deg fs-5"></i> Se connecter
+          </button>
+        </div>
+        <div class="col-5 col-md-3">
+          <button id="disconnectBtn" class="btn btn-disconnect w-100 d-flex align-items-center justify-content-center gap-2" disabled>
+            <i class="bi bi-x-lg"></i> Déconnecter
+          </button>
+        </div>
+      </div>
+
+      <!-- Zone vidéo -->
+      <div class="video-container" id="videoContainer">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <div class="live-badge" id="liveBadge">
+          <span class="rec-dot"></span> EN DIRECT
+        </div>
+        <div class="stats-overlay" id="statsOverlay" style="display:none;">
+          <i class="bi bi-wifi"></i> <span id="statsText">--</span>
+        </div>
+        <div class="video-placeholder" id="videoPlaceholder">
+          <i class="bi bi-camera-video-off"></i>
+          <div>
+            <div class="fw-semibold" style="color: #5b6d87;">Aucun flux vidéo</div>
+            <small style="color: #3e4d63;">Cliquez sur « Se connecter » pour démarrer</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Zone d'information -->
+      <div class="info-toast" id="messageBox">
+        <i class="bi bi-info-circle-fill" style="color: #3b82f6;"></i>
+        <span id="messageText">Prêt à recevoir le flux. Assurez-vous que la caméra du téléphone est démarrée.</span>
+      </div>
+
+      <!-- Info ligne -->
+      <div class="d-flex align-items-center justify-content-between mt-3 small text-secondary flex-wrap gap-2">
+        <span>
+          <i class="bi bi-info-circle me-1"></i>
+          ID local : <span class="key-hint" id="localPeerId">génération...</span>
+        </span>
+        <span>
+          <i class="bi bi-clock-history me-1"></i>
+          <span id="connectionTime">--</span>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      // ---- Configuration ----
+      const peer = new Peer({
+        debug: 1,
+        config: {
+          'iceServers': [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' }
+          ]
+        }
+      });
+
+      // ---- DOM ----
+      const connectBtn = document.getElementById('connectBtn');
+      const disconnectBtn = document.getElementById('disconnectBtn');
+      const peerIdInput = document.getElementById('peerIdInput');
+      const remoteVideo = document.getElementById('remoteVideo');
+      const videoPlaceholder = document.getElementById('videoPlaceholder');
+      const liveBadge = document.getElementById('liveBadge');
+      const statsOverlay = document.getElementById('statsOverlay');
+      const statsText = document.getElementById('statsText');
+      const statusPill = document.getElementById('statusPill');
+      const statusText = document.getElementById('statusText');
+      const messageBox = document.getElementById('messageBox');
+      const messageText = document.getElementById('messageText');
+      const localPeerIdSpan = document.getElementById('localPeerId');
+      const connectionTimeSpan = document.getElementById('connectionTime');
+      const fullscreenBtn = document.getElementById('fullscreenBtn');
+      const videoContainer = document.getElementById('videoContainer');
+
+      // ---- État ----
+      let currentCall = null;
+      let connectionStartTime = null;
+      let statsInterval = null;
+      let connectionTimer = null;
+
+      // ---- Utilitaires ----
+      function showMessage(msg, type = 'info') {
+        messageText.textContent = msg;
+        const icons = {
+          info: '<i class="bi bi-info-circle-fill" style="color: #3b82f6;"></i>',
+          success: '<i class="bi bi-check-circle-fill" style="color: #00e676;"></i>',
+          error: '<i class="bi bi-exclamation-triangle-fill" style="color: #ff4d4d;"></i>',
+          warning: '<i class="bi bi-exclamation-circle-fill" style="color: #ffb800;"></i>'
+        };
+        messageBox.innerHTML = (icons[type] || icons.info) + ' <span>' + msg + '</span>';
+        messageBox.style.borderLeft = '4px solid ' + ({
+          info: '#3b82f6', success: '#00e676', error: '#ff4d4d', warning: '#ffb800'
+        }[type] || '#3b82f6');
+      }
+
+      function setStatus(state, text) {
+        statusPill.className = 'status-pill';
+        if (state === 'connected') statusPill.classList.add('connected');
+        else if (state === 'connecting') statusPill.classList.add('connecting');
+        else if (state === 'error') statusPill.classList.add('error');
+        statusText.textContent = text;
+      }
+
+      function formatTime(seconds) {
+        const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+        const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+        return `${h}:${m}:${s}`;
+      }
+
+      function startConnectionTimer() {
+        connectionStartTime = Date.now();
+        clearInterval(connectionTimer);
+        connectionTimer = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - connectionStartTime) / 1000);
+          connectionTimeSpan.innerHTML = `<i class="bi bi-clock-history me-1"></i> Connecté depuis ${formatTime(elapsed)}`;
+        }, 1000);
+      }
+
+      function stopConnectionTimer() {
+        clearInterval(connectionTimer);
+        connectionTimer = null;
+      }
+
+      function showVideo(visible) {
+        if (visible) {
+          videoPlaceholder.classList.add('hidden');
+          liveBadge.classList.add('visible');
+          statsOverlay.style.display = 'flex';
+        } else {
+          videoPlaceholder.classList.remove('hidden');
+          liveBadge.classList.remove('visible');
+          statsOverlay.style.display = 'none';
+        }
+      }
+
+      // ---- Surveillance des statistiques WebRTC ----
+      function startStatsMonitoring() {
+        clearInterval(statsInterval);
+        statsInterval = setInterval(async () => {
+          if (!currentCall || !currentCall.peerConnection) return;
+          try {
+            const stats = await currentCall.peerConnection.getStats();
+            let inboundVideo = null;
+            stats.forEach(report => {
+              if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                inboundVideo = report;
+              }
+            });
+            if (inboundVideo) {
+              const fps = inboundVideo.framesPerSecond || 0;
+              const width = inboundVideo.frameWidth || 0;
+              const height = inboundVideo.frameHeight || 0;
+              const bytesReceived = inboundVideo.bytesReceived || 0;
+              statsText.textContent = `${width}×${height} • ${fps} fps • ${(bytesReceived / 1024 / 1024).toFixed(1)} Mo`;
+            }
+          } catch (e) {
+            // ignore
+          }
+        }, 1500);
+      }
+
+      function stopStatsMonitoring() {
+        clearInterval(statsInterval);
+        statsInterval = null;
+      }
+
+      // ---- Connexion à la caméra ----
+      connectBtn.addEventListener('click', () => {
+        const targetId = peerIdInput.value.trim();
+        if (!targetId) {
+          showMessage('Veuillez saisir l\'ID du téléphone.', 'warning');
+          return;
+        }
+
+        // Réinitialisation
+        if (currentCall) {
+          currentCall.close();
+          currentCall = null;
+        }
+
+        connectBtn.disabled = true;
+        connectBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Connexion...';
+        setStatus('connecting', 'Connexion...');
+        showMessage('Tentative de connexion à ' + targetId + '...', 'info');
+
+        try {
+          // Appel avec un flux null (on veut juste recevoir)
+          const call = peer.call(targetId, null);
+
+          call.on('stream', (remoteStream) => {
+            console.log('Flux reçu !');
+            remoteVideo.srcObject = remoteStream;
+            showVideo(true);
+            setStatus('connected', 'Connecté');
+            connectBtn.innerHTML = '<i class="bi bi-link-45deg fs-5"></i> Se connecter';
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = false;
+            showMessage('Flux vidéo reçu avec succès !', 'success');
+
+            startConnectionTimer();
+            startStatsMonitoring();
+          });
+
+          call.on('close', () => {
+            console.log('Appel terminé');
+            handleDisconnection('Le flux a été interrompu.');
+          });
+
+          call.on('error', (err) => {
+            console.error('Erreur appel:', err);
+            handleDisconnection('Erreur : ' + err.message);
+            setStatus('error', 'Erreur');
+          });
+
+          currentCall = call;
+        } catch (err) {
+          console.error('Erreur:', err);
+          connectBtn.disabled = false;
+          connectBtn.innerHTML = '<i class="bi bi-link-45deg fs-5"></i> Se connecter';
+          setStatus('error', 'Erreur');
+          showMessage('Impossible de se connecter : ' + err.message, 'error');
+        }
+      });
+
+      // ---- Déconnexion ----
+      function handleDisconnection(message) {
+        if (currentCall) {
+          currentCall.close();
+          currentCall = null;
+        }
+        remoteVideo.srcObject = null;
+        showVideo(false);
+        setStatus('error', 'Déconnecté');
+        connectBtn.disabled = false;
+        connectBtn.innerHTML = '<i class="bi bi-link-45deg fs-5"></i> Se connecter';
+        disconnectBtn.disabled = true;
+        stopConnectionTimer();
+        stopStatsMonitoring();
+        connectionTimeSpan.innerHTML = '';
+        if (message) showMessage(message, 'warning');
+      }
+
+      disconnectBtn.addEventListener('click', () => {
+        handleDisconnection('Déconnexion manuelle.');
+        showMessage('Vous vous êtes déconnecté.', 'info');
+      });
+
+      // ---- PeerJS events ----
+      peer.on('open', (id) => {
+        console.log('PeerJS prêt, ID:', id);
+        localPeerIdSpan.textContent = id;
+      });
+
+      peer.on('error', (err) => {
+        console.error('PeerJS error:', err);
+        setStatus('error', 'Erreur PeerJS');
+        showMessage('Erreur PeerJS : ' + err.message, 'error');
+        connectBtn.disabled = false;
+        connectBtn.innerHTML = '<i class="bi bi-link-45deg fs-5"></i> Se connecter';
+      });
+
+      peer.on('disconnected', () => {
+        console.warn('PeerJS déconnecté du serveur');
+        showMessage('Connexion au serveur perdue. Tentative de reconnexion...', 'warning');
+        peer.reconnect();
+      });
+
+      // ---- Plein écran ----
+      fullscreenBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          videoContainer.requestFullscreen().catch(err => {
+            showMessage('Plein écran impossible : ' + err.message, 'error');
+          });
+          fullscreenBtn.innerHTML = '<i class="bi bi-fullscreen-exit"></i>';
+        } else {
+          document.exitFullscreen();
+          fullscreenBtn.innerHTML = '<i class="bi bi-arrows-fullscreen"></i>';
+        }
+      });
+
+      document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement) {
+          fullscreenBtn.innerHTML = '<i class="bi bi-arrows-fullscreen"></i>';
+        }
+      });
+
+      // ---- Raccourcis clavier ----
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && document.activeElement === peerIdInput) {
+          connectBtn.click();
+        }
+        if (e.key === 'Escape' && document.fullscreenElement) {
+          document.exitFullscreen();
+        }
+        if (e.key === 'f' && e.ctrlKey) {
+          e.preventDefault();
+          fullscreenBtn.click();
+        }
+      });
+
+      // ---- Nettoyage ----
+      window.addEventListener('beforeunload', () => {
+        if (currentCall) currentCall.close();
+        stopConnectionTimer();
+        stopStatsMonitoring();
+        peer.destroy();
+      });
+
+      // Initialisation
+      setStatus('', 'Déconnecté');
+      showMessage('Prêt à recevoir le flux. Assurez-vous que la caméra du téléphone est démarrée.', 'info');
+    })();
+  </script>
+</body>
+</html>
